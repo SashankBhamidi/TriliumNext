@@ -6,7 +6,7 @@ import dateUtils from "./utils/date.js";
 import entityChangesService from "./entity_changes.js";
 import events from "./events.js";
 import getInstanceId from "./instance_id.js";
-import { getContext } from "./context.js";
+import { getContext, set as ctxSet } from "./context.js";
 import { getSql } from "./sql/index.js";
 
 let counter = 0;
@@ -74,6 +74,39 @@ describe("entity_changes service (real DB)", () => {
             const row = readRow(ec.entityName, ec.entityId)!;
             expect(idsAfter).toContain(row.id);
             expect(entityChangesService.getMaxEntityChangeId()).toBeGreaterThanOrEqual(row.id!);
+        });
+
+        it("stamps userId from CLS when the caller omits it", () => {
+            const ec = buildEntityChange();
+
+            getContext().init(() => {
+                ctxSet("userId", "test-user-stamp");
+                entityChangesService.putEntityChange(ec);
+            });
+
+            const row = readRow(ec.entityName, ec.entityId)!;
+            expect(row.userId).toBe("test-user-stamp");
+        });
+
+        it("leaves userId NULL when no userId is in CLS", () => {
+            const ec = buildEntityChange();
+
+            getContext().init(() => entityChangesService.putEntityChange(ec));
+
+            const row = readRow(ec.entityName, ec.entityId)!;
+            expect(row.userId).toBeNull();
+        });
+
+        it("preserves NULL when ec.userId is explicitly null (system/sync row)", () => {
+            const ec = buildEntityChange({ userId: null } as EntityChange);
+
+            getContext().init(() => {
+                ctxSet("userId", "should-not-be-stamped");
+                entityChangesService.putEntityChange(ec);
+            });
+
+            const row = readRow(ec.entityName, ec.entityId)!;
+            expect(row.userId).toBeNull();
         });
 
         it("falls back to the 'NA' componentId when none is available in the context", () => {

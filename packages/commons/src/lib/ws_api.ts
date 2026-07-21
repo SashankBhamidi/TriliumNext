@@ -14,6 +14,7 @@ export interface EntityChange {
     componentId?: string | null;
     changeId?: string | null;
     instanceId?: string | null;
+    userId?: string | null;
 }
 
 export interface EntityRow {

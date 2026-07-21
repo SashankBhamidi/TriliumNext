@@ -12,13 +12,14 @@ function getTokenHash(token: crypto.BinaryLike) {
     return crypto.createHash("sha256").update(token).digest("base64");
 }
 
-function createToken(tokenName: string) {
+function createToken(tokenName: string, userId: string) {
     const token = randomSecureToken(32);
     const tokenHash = getTokenHash(token);
 
     const etapiToken = new BEtapiToken({
         name: tokenName,
-        tokenHash
+        tokenHash,
+        userId
     }).save();
 
     return {
@@ -68,11 +69,11 @@ function parseAuthToken(auth: string | undefined) {
     }
 }
 
-function isValidAuthHeader(auth: string | undefined) {
+function getTokenFromAuthHeader(auth: string | undefined): BEtapiToken | null {
     const parsed = parseAuthToken(auth);
 
     if (!parsed) {
-        return false;
+        return null;
     }
 
     const authTokenHash = getTokenHash(parsed.token);
@@ -81,20 +82,24 @@ function isValidAuthHeader(auth: string | undefined) {
         const etapiToken = becca.getEtapiToken(parsed.etapiTokenId);
 
         if (!etapiToken) {
-            return false;
+            return null;
         }
 
-        return constantTimeCompare(etapiToken.tokenHash, authTokenHash);
+        return constantTimeCompare(etapiToken.tokenHash, authTokenHash) ? etapiToken : null;
     } else {
         // Check ALL tokens to prevent timing attacks - do not short-circuit
-        let isValid = false;
+        let matched: BEtapiToken | null = null;
         for (const etapiToken of becca.getEtapiTokens()) {
             if (constantTimeCompare(etapiToken.tokenHash, authTokenHash)) {
-                isValid = true;
+                matched = etapiToken;
             }
         }
-        return isValid;
+        return matched;
     }
+}
+
+function getUserIdForToken(auth: string | undefined): string | null {
+    return getTokenFromAuthHeader(auth)?.userId ?? null;
 }
 
 function renameToken(etapiTokenId: string, newName: string) {
@@ -124,5 +129,6 @@ export default {
     renameToken,
     deleteToken,
     parseAuthToken,
-    isValidAuthHeader
+    getTokenFromAuthHeader,
+    getUserIdForToken
 };

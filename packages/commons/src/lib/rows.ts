@@ -68,6 +68,7 @@ export interface EtapiTokenRow {
     etapiTokenId?: string;
     name: string;
     tokenHash: string;
+    userId?: string | null;
     utcDateCreated?: string;
     utcDateModified?: string;
     isDeleted?: boolean;

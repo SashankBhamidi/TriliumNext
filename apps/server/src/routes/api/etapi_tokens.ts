@@ -12,7 +12,11 @@ function getTokens() {
 }
 
 function createToken(req: Request) {
-    return etapiTokenService.createToken(req.body.tokenName) satisfies PostTokensResponse;
+    const userId: string | undefined = (req.session as any)?.userId;
+    if (!userId) {
+        throw new Error("Cannot create ETAPI token: session has no userId");
+    }
+    return etapiTokenService.createToken(req.body.tokenName, userId) satisfies PostTokensResponse;
 }
 
 function patchToken(req: Request<{ etapiTokenId: string }>) {

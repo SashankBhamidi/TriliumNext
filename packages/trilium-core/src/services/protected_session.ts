@@ -1,23 +1,30 @@
 "use strict";
 
 import dataEncryptionService from "./encryption/data_encryption";
+import { getUserId } from "./context.js";
 
-let dataKey: Uint8Array | null = null;
+const dataKeys = new Map<string, Uint8Array>();
+
+// Resolves the key for the currently-running request.
+// Falls back to "__admin__" when no userId in CLS (startup, scheduler timeout).
+function getCurrentUserId(): string {
+    return getUserId() ?? "__admin__";
+}
 
 function setDataKey(decryptedDataKey: Uint8Array) {
-    dataKey = Uint8Array.from(decryptedDataKey);
+    dataKeys.set(getCurrentUserId(), Uint8Array.from(decryptedDataKey));
 }
 
 function getDataKey() {
-    return dataKey;
+    return dataKeys.get(getCurrentUserId()) ?? null;
 }
 
 export function resetDataKey() {
-    dataKey = null;
+    dataKeys.delete(getCurrentUserId());
 }
 
 export function isProtectedSessionAvailable() {
-    return !!dataKey;
+    return dataKeys.has(getCurrentUserId());
 }
 
 function encrypt(plainText: string | Uint8Array) {

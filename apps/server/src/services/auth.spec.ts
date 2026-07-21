@@ -333,7 +333,7 @@ describe("Auth", () => {
         });
 
         it("checkEtapiToken accepts a valid token header and rejects an invalid one", () => {
-            const { authToken } = cls.init(() => etapiTokens.createToken("auth-spec-token"));
+            const { authToken } = cls.init(() => etapiTokens.createToken("auth-spec-token", "auth-spec-user"));
             const next = vi.fn();
             auth.checkEtapiToken(makeReq({ headers: { authorization: authToken } }), makeRes() as never, next);
             expect(next).toHaveBeenCalled();

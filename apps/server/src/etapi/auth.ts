@@ -1,4 +1,4 @@
-import { password_encryption as passwordEncryptionService } from "@triliumnext/core";
+import { password_encryption as passwordEncryptionService, user_service } from "@triliumnext/core";
 import type { RequestHandler, Router } from "express";
 
 import { becca } from "@triliumnext/core";
@@ -27,7 +27,7 @@ function register(router: Router, loginMiddleware: RequestHandler[]) {
     eu.NOT_AUTHENTICATED_ROUTE(router, "post", "/etapi/auth/login", [...loginMiddleware, verifyPasswordMiddleware], (req, res) => {
         const { tokenName } = req.body;
 
-        const { authToken } = etapiTokenService.createToken(tokenName || "ETAPI login");
+        const { authToken } = etapiTokenService.createToken(tokenName || "ETAPI login", user_service.getAdminUserId());
 
         res.status(201).json({
             authToken

@@ -52,11 +52,13 @@ describe("Login (sync) API", () => {
         const hash = utils.hmac(documentSecret, now);
         const req = syncReq({ timestamp: now, syncVersion: appInfo.syncVersion, hash });
         regenerateCalled = false;
-        const result = await loginApiRoute.loginSync(req) as { instanceId: string; maxEntityChangeId: number };
+        const result = await loginApiRoute.loginSync(req) as { instanceId: string; maxEntityChangeId: number; supportsMultiUserSync: boolean };
         expect(result.instanceId).toBeTruthy();
-        // session must be regenerated (fixation protection) before being marked as logged in
         expect(regenerateCalled).toBe(true);
         expect(req.session.loggedIn).toBe(true);
+        // userId is stamped on the sync session and capability flag is returned.
+        expect((req.session as any).userId).toBeTruthy();
+        expect(result.supportsMultiUserSync).toBe(true);
     });
 });
 

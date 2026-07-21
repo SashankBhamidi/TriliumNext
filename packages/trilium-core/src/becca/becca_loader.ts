@@ -5,7 +5,8 @@ import entityConstructor from "../becca/entity_constructor.js";
 import { getLog } from "../services/log.js";
 import { dbReady } from "../services/sql_init.js";
 import ws from "../services/ws.js";
-import becca from "./becca.js";
+import becca, { getBecca } from "./becca.js";
+import { evictUser } from "./becca_cache.js";
 import type AbstractBeccaEntity from "./entities/abstract_becca_entity.js";
 import BAttribute from "./entities/battribute.js";
 import BBranch from "./entities/bbranch.js";
@@ -13,7 +14,7 @@ import BEtapiToken from "./entities/betapi_token.js";
 import BNote from "./entities/bnote.js";
 import BOption from "./entities/boption.js";
 import { getSql } from "../services/sql";
-import { getContext, set as ctxSet } from "../services/context.js";
+import { getContext, getUserId, set as ctxSet } from "../services/context.js";
 
 export const beccaLoaded = new Promise<void>(async (res, rej) => {
     // We have to import async since options init requires keyboard actions which require translations.
@@ -73,7 +74,7 @@ function load() {
             new BOption(row);
         }
 
-        for (const row of sql.getRows<EtapiTokenRow>(/*sql*/`SELECT etapiTokenId, name, tokenHash, utcDateCreated, utcDateModified FROM etapi_tokens WHERE isDeleted = 0`)) {
+        for (const row of sql.getRows<EtapiTokenRow>(/*sql*/`SELECT * FROM etapi_tokens WHERE isDeleted = 0`)) {
             new BEtapiToken(row);
         }
 
@@ -169,7 +170,7 @@ export async function loadBeccaForUser(target: import("./becca-interface.js").de
             }
 
             for (const row of sql.getRows<EtapiTokenRow>(
-                /*sql*/`SELECT etapiTokenId, name, tokenHash, utcDateCreated, utcDateModified FROM etapi_tokens WHERE isDeleted = 0`
+                /*sql*/`SELECT * FROM etapi_tokens WHERE isDeleted = 0`
             )) {
                 new BEtapiToken(row);
             }
@@ -387,13 +388,23 @@ function etapiTokenDeleted(etapiTokenId: string) {
 
 eventService.subscribeBeccaLoader(eventService.ENTER_PROTECTED_SESSION, () => {
     try {
-        becca.decryptProtectedNotes();
+        getBecca().decryptProtectedNotes();
     } catch (e: any) {
         getLog().error(`Could not decrypt protected notes: ${e.message} ${e.stack}`);
     }
 });
 
-eventService.subscribeBeccaLoader(eventService.LEAVE_PROTECTED_SESSION, load);
+eventService.subscribeBeccaLoader(eventService.LEAVE_PROTECTED_SESSION, () => {
+    const userId = getUserId();
+    if (userId) {
+        evictUser(userId);
+        // Clear the CLS-cached becca reference so the next getBecca() call
+        // within this same request does not return the now-evicted object.
+        ctxSet("resolvedBecca", undefined);
+    } else {
+        load();
+    }
+});
 
 export { load, reload };
 

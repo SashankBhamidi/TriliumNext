@@ -36,6 +36,7 @@ interface CheckResponse {
 interface SyncResponse {
     instanceId: string;
     maxEntityChangeId: number;
+    supportsMultiUserSync?: boolean;
 }
 
 interface ChangesResponse {

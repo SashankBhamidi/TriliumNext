@@ -48,31 +48,37 @@ describe("etapi_tokens", () => {
         });
     });
 
-    describe("createToken + isValidAuthHeader", () => {
+    describe("createToken + getTokenFromAuthHeader", () => {
         it("creates a token that validates via its id_token, Bearer and Basic forms", () => {
-            const { authToken } = cls.init(() => etapiTokens.createToken("My token"));
+            const { authToken } = cls.init(() => etapiTokens.createToken("My token", "test-user-id"));
             expect(authToken).toContain("_");
 
-            expect(etapiTokens.isValidAuthHeader(authToken)).toBe(true);
-            expect(etapiTokens.isValidAuthHeader(`Bearer ${authToken}`)).toBe(true);
-            expect(etapiTokens.isValidAuthHeader("Basic " + toBase64(`etapi:${authToken}`))).toBe(true);
+            expect(etapiTokens.getTokenFromAuthHeader(authToken)).not.toBeNull();
+            expect(etapiTokens.getTokenFromAuthHeader(`Bearer ${authToken}`)).not.toBeNull();
+            expect(etapiTokens.getTokenFromAuthHeader("Basic " + toBase64(`etapi:${authToken}`))).not.toBeNull();
 
             // legacy form (no id) should also match by scanning all tokens
             const legacyToken = authToken.split("_")[1];
-            expect(etapiTokens.isValidAuthHeader(legacyToken)).toBe(true);
+            expect(etapiTokens.getTokenFromAuthHeader(legacyToken)).not.toBeNull();
+        });
+
+        it("returns the userId on the matched token", () => {
+            const { authToken } = cls.init(() => etapiTokens.createToken("Token with user", "my-user-id"));
+            const token = etapiTokens.getTokenFromAuthHeader(authToken);
+            expect(token?.userId).toBe("my-user-id");
         });
 
         it("rejects unparseable, unknown-id, and non-matching tokens", () => {
-            expect(etapiTokens.isValidAuthHeader(undefined)).toBe(false);
-            expect(etapiTokens.isValidAuthHeader("a_b_c")).toBe(false);
-            expect(etapiTokens.isValidAuthHeader("nonexistentid_sometoken")).toBe(false);
-            expect(etapiTokens.isValidAuthHeader("unmatchedlegacytoken")).toBe(false);
+            expect(etapiTokens.getTokenFromAuthHeader(undefined)).toBeNull();
+            expect(etapiTokens.getTokenFromAuthHeader("a_b_c")).toBeNull();
+            expect(etapiTokens.getTokenFromAuthHeader("nonexistentid_sometoken")).toBeNull();
+            expect(etapiTokens.getTokenFromAuthHeader("unmatchedlegacytoken")).toBeNull();
         });
     });
 
     describe("rename / delete / get", () => {
         it("renames an existing token and lists it", () => {
-            const { authToken } = cls.init(() => etapiTokens.createToken("Before"));
+            const { authToken } = cls.init(() => etapiTokens.createToken("Before", "user-rename"));
             const etapiTokenId = authToken.split("_")[0];
 
             cls.init(() => etapiTokens.renameToken(etapiTokenId, "After"));
@@ -89,7 +95,7 @@ describe("etapi_tokens", () => {
         });
 
         it("deletes a token and treats a repeat delete as a no-op", () => {
-            const { authToken } = cls.init(() => etapiTokens.createToken("ToDelete"));
+            const { authToken } = cls.init(() => etapiTokens.createToken("ToDelete", "user-delete"));
             const etapiTokenId = authToken.split("_")[0];
 
             cls.init(() => etapiTokens.deleteToken(etapiTokenId));

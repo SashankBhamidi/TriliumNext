@@ -5,7 +5,7 @@ import { describe, expect, it } from "vitest";
 import etapiTokensRoute from "./etapi_tokens.js";
 
 function req(body: Record<string, unknown> = {}, params: Record<string, string> = {}) {
-    return { body, params } as unknown as Request<{ etapiTokenId: string }>;
+    return { body, params, session: { userId: "spec-user-id" } } as unknown as Request<{ etapiTokenId: string }>;
 }
 
 describe("ETAPI tokens API", () => {

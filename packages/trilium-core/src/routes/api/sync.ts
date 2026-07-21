@@ -150,6 +150,7 @@ function getChanged(req: Request) {
     const clientInstanceId = req.query.instanceId;
     let filteredEntityChanges: EntityChange[] = [];
 
+    const sessionUserId: string | null = (req as any).session?.userId ?? null;
     const sql = getSql();
     do {
         const entityChanges: EntityChange[] = sql.getRows<EntityChange>(
@@ -158,9 +159,10 @@ function getChanged(req: Request) {
             FROM entity_changes
             WHERE isSynced = 1
             AND id > ?
+            AND (userId IS NULL OR ? IS NULL OR userId = ?)
             ORDER BY id
             LIMIT 1000`,
-            [lastEntityChangeId]
+            [lastEntityChangeId, sessionUserId, sessionUserId]
         );
 
         if (entityChanges.length === 0) {
@@ -191,8 +193,9 @@ function getChanged(req: Request) {
             FROM entity_changes
             WHERE isSynced = 1
             AND instanceId != ?
-            AND id > ?`,
-            [clientInstanceId, lastEntityChangeId]
+            AND id > ?
+            AND (userId IS NULL OR ? IS NULL OR userId = ?)`,
+            [clientInstanceId, lastEntityChangeId, sessionUserId, sessionUserId]
         )
     };
 }

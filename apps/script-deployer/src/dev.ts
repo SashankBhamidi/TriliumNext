@@ -57,10 +57,11 @@ async function ensureEtapiToken() {
     }
 
     const cls = (await import("@triliumnext/core")).cls;
+    const { user_service } = await import("@triliumnext/core");
     const etapiTokens = (await import("@triliumnext/server/src/services/etapi_tokens.js")).default;
 
     const authToken: string = cls.init(() => {
-        const { authToken } = etapiTokens.createToken("script-deployer");
+        const { authToken } = etapiTokens.createToken("script-deployer", user_service.getAdminUserId());
         return authToken;
     });
 

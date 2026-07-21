@@ -1,4 +1,4 @@
-import { cls, password_encryption, protected_session } from "@triliumnext/core";
+import { cls, password_encryption, protected_session, user_service } from "@triliumnext/core";
 import { Application } from "express";
 import { beforeAll, describe, expect, it } from "vitest";
 import supertest from "supertest";
@@ -95,7 +95,11 @@ describe("etapi/note-history", () => {
     });
 
     it("masks protected entries when no protected session is active", async () => {
-        protected_session.resetDataKey();
+        const adminUserId = user_service.getAdminUserId();
+        cls.init(() => {
+            cls.set("userId", adminUserId);
+            protected_session.resetDataKey();
+        });
         const noteId = await createNote(app, token);
 
         try {
@@ -118,10 +122,19 @@ describe("etapi/note-history", () => {
             throw new Error("Expected a data key from the fixture password.");
         }
         const noteId = await createNote(app, token);
+        const adminUserId = user_service.getAdminUserId();
 
         try {
-            protected_session.default.setDataKey(dataKey);
-            const encryptedTitle = protected_session.default.encrypt("secret title");
+            // setDataKey reads userId from CLS; set it to the admin user so it matches
+            // the userId the ETAPI request will run under.
+            cls.init(() => {
+                cls.set("userId", adminUserId);
+                protected_session.default.setDataKey(dataKey);
+            });
+            const encryptedTitle = cls.init(() => {
+                cls.set("userId", adminUserId);
+                return protected_session.default.encrypt("secret title");
+            });
             cls.init(() => sql.execute(
                 "UPDATE notes SET isProtected = 1, title = ? WHERE noteId = ?",
                 [encryptedTitle, noteId]
@@ -134,7 +147,10 @@ describe("etapi/note-history", () => {
             const change = response.body.find((c: { noteId: string }) => c.noteId === noteId);
             expect(change?.title).toStrictEqual("secret title");
         } finally {
-            protected_session.resetDataKey();
+            cls.init(() => {
+                cls.set("userId", adminUserId);
+                protected_session.resetDataKey();
+            });
             cls.init(() => sql.execute("UPDATE notes SET isProtected = 0 WHERE noteId = ?", [noteId]));
         }
     });

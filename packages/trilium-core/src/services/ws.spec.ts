@@ -12,12 +12,16 @@ import { randomString } from "./utils/index.js";
 import ws from "./ws.js";
 
 const sentAll: WebSocketMessage[] = [];
+const sentToUser: Array<{ userId: string; message: WebSocketMessage }> = [];
 const sentToClient: Array<{ clientId: string; message: WebSocketMessage }> = [];
 let clientHandler: ClientMessageHandler | undefined;
 
 const fakeProvider = {
     sendMessageToAllClients: vi.fn((message: WebSocketMessage) => {
         sentAll.push(message);
+    }),
+    sendMessageToUserClients: vi.fn((userId: string, message: WebSocketMessage) => {
+        sentToUser.push({ userId, message });
     }),
     sendMessageToClient: vi.fn((clientId: string, message: WebSocketMessage) => {
         sentToClient.push({ clientId, message });
@@ -166,19 +170,28 @@ describe("ws service (real DB)", () => {
     });
 
     it("builds a frontend-update message filling in properties for every entity type", () => {
+        const sentAllBefore = sentAll.length;
+        const sentUserBefore = sentToUser.length;
+
         cls.init(() => {
             cls.set("entityChangeIds", [...ecIds]);
             ws.sendTransactionEntityChangesToAllClients();
         });
 
-        const message = sentAll[sentAll.length - 1];
-        expect(message.type).toBe("frontend-update");
-        if (message.type !== "frontend-update") throw new Error("expected frontend-update");
+        // Fixture entity changes (existingEntityChangeId calls) were backfilled with adminUserId
+        // by seedAdminUser(). They go to sendMessageToUserClients. The inserted rows (insertEntityChange)
+        // have userId = NULL so they go to sendMessageToAllClients. Collect all entity changes from both.
+        const allMessages = [
+            ...sentAll.slice(sentAllBefore),
+            ...sentToUser.slice(sentUserBefore).map((e) => e.message)
+        ];
+        const allChanges = allMessages
+            .filter((m) => m.type === "frontend-update")
+            .flatMap((m) => (m as any).data.entityChanges);
 
-        const changes = message.data.entityChanges;
         // Every entity type should have been processed.
         const byName = new Map<string, unknown>();
-        for (const c of changes) byName.set(c.entityName, c);
+        for (const c of allChanges) byName.set(c.entityName, c);
         expect(byName.has("notes")).toBe(true);
         expect(byName.has("branches")).toBe(true);
         expect(byName.has("attributes")).toBe(true);
@@ -187,11 +200,11 @@ describe("ws service (real DB)", () => {
         expect(byName.has("note_reordering")).toBe(true);
 
         // becca-hit note got its full pojo (title present).
-        const rootChange = changes.find((c) => c.entityName === "notes" && c.entityId === "root");
+        const rootChange = allChanges.find((c: any) => c.entityName === "notes" && c.entityId === "root");
         expect(rootChange?.entity).toMatchObject({ noteId: "root" });
 
         // note_reordering for root carries the child branch positions map.
-        const reorder = changes.find((c) => c.entityName === "note_reordering" && c.entityId === "root");
+        const reorder = allChanges.find((c: any) => c.entityName === "note_reordering" && c.entityId === "root");
         expect(reorder?.positions).toBeTypeOf("object");
     });
 

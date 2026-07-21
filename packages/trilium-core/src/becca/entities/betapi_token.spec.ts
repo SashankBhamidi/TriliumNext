@@ -98,6 +98,7 @@ describe("BEtapiToken getPojo", () => {
             etapiTokenId: "betapi-spec-pojo-1",
             name: "pojo token",
             tokenHash: "hash-pojo",
+            userId: null,
             utcDateCreated: "2025-06-27 14:10:39.688+0300",
             utcDateModified: "2025-06-27 14:10:39.688+0300",
             isDeleted: false

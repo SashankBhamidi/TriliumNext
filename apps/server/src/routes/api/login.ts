@@ -4,7 +4,7 @@
  * Protected session routes (loginToProtectedSession, logoutFromProtectedSession,
  * touchProtectedSession) are now in core and registered via buildSharedApiRoutes.
  */
-import { app_info as appInfo, date_utils as dateUtils, getInstanceId, options } from "@triliumnext/core";
+import { app_info as appInfo, date_utils as dateUtils, getInstanceId, options, user_service } from "@triliumnext/core";
 import type { Request } from "express";
 
 import { verifyLoginCredentials } from "../../services/auth.js";
@@ -121,10 +121,12 @@ async function loginSync(req: Request) {
     });
 
     req.session.loggedIn = true;
+    req.session.userId = user_service.getAdminUserId();
 
     return {
         instanceId: getInstanceId(),
-        maxEntityChangeId: sql.getValue("SELECT COALESCE(MAX(id), 0) FROM entity_changes WHERE isSynced = 1")
+        maxEntityChangeId: sql.getValue("SELECT COALESCE(MAX(id), 0) FROM entity_changes WHERE isSynced = 1"),
+        supportsMultiUserSync: true
     };
 }
 
@@ -139,7 +141,7 @@ async function token(req: Request) {
     // for backwards compatibility with Sender which does not send the name
     const tokenName = req.body.tokenName || "Trilium Sender / Web Clipper";
 
-    const { authToken } = etapiTokenService.createToken(tokenName);
+    const { authToken } = etapiTokenService.createToken(tokenName, user_service.getAdminUserId());
 
     return { token: authToken };
 }

@@ -1,7 +1,7 @@
 import type { NextFunction, Request, RequestHandler, Response, Router } from "express";
 import type { ParamsDictionary } from "express-serve-static-core";
 
-import { becca } from "@triliumnext/core";
+import { becca, warmBeccaForUser } from "@triliumnext/core";
 import { namespace } from "../cls_provider.js";
 import type { ApiRequestHandler, SyncRouteRequestHandler } from "../routes/route_api.js";
 import { cls } from "@triliumnext/core";
@@ -45,10 +45,20 @@ function sendError(res: Response, statusCode: number, code: string, message: str
 }
 
 function checkEtapiAuth(req: Request, res: Response, next: NextFunction) {
-    if (noAuthentication || etapiTokenService.isValidAuthHeader(req.headers.authorization)) {
+    if (noAuthentication || etapiTokenService.getTokenFromAuthHeader(req.headers.authorization)) {
         next();
     } else {
         sendError(res, 401, "NOT_AUTHENTICATED", "Not authenticated");
+    }
+}
+
+function handleRouteError(res: Response, e: unknown, method: string, path: string) {
+    const err = e as any;
+    getLog().error(`${method} ${path} threw exception ${err.message} with stacktrace: ${err.stack}`);
+    if (e instanceof EtapiError) {
+        sendError(res, e.statusCode, e.code, e.message);
+    } else {
+        sendError(res, 500, GENERIC_CODE, err.message);
     }
 }
 
@@ -57,22 +67,28 @@ function processRequest<P extends ParamsDictionary>(req: Request<P>, res: Respon
         namespace.bindEmitter(req);
         namespace.bindEmitter(res);
 
-        cls.init(() => {
+        const result = cls.init(() => {
             cls.set("componentId", "etapi");
             cls.set("localNowDateTime", req.headers["trilium-local-now-datetime"]);
 
+            const token = etapiTokenService.getTokenFromAuthHeader(req.headers.authorization);
             const cb = () => routeHandler(req, res, next);
+
+            if (token?.userId) {
+                cls.set("userId", token.userId);
+                return warmBeccaForUser(token.userId).then(() => sql.transactional(cb));
+            }
 
             return sql.transactional(cb);
         });
-    } catch (e: any) {
-        getLog().error(`${method} ${path} threw exception ${e.message} with stacktrace: ${e.stack}`);
 
-        if (e instanceof EtapiError) {
-            sendError(res, e.statusCode, e.code, e.message);
-        } else {
-            sendError(res, 500, GENERIC_CODE, e.message);
+        if (result instanceof Promise) {
+            result.catch((e: unknown) => {
+                handleRouteError(res, e, method, path);
+            });
         }
+    } catch (e: unknown) {
+        handleRouteError(res, e, method, path);
     }
 }
 

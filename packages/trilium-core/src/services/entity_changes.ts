@@ -35,6 +35,20 @@ function putEntityChange(origEntityChange: EntityChange) {
 
     ec.componentId = ec.componentId || cls.getComponentId() || "NA"; // NA = not available
     ec.instanceId = ec.instanceId || getInstanceId();
+    // Only fill userId from CLS when the caller left it undefined (local write).
+    // An explicit null means "system row" and must not be overridden. Replicated
+    // changes arriving via sync push carry userId=null and must stay null so the
+    // userId IS NULL system-row invariant is preserved for sync filtering.
+    if (ec.userId === undefined) {
+        const clsUserId = cls.getUserId() ?? null;
+        if (clsUserId !== null) {
+            ec.userId = clsUserId;
+        } else {
+            delete ec.userId;
+        }
+    } else if (ec.userId === null) {
+        delete ec.userId;
+    }
     ec.isSynced = ec.isSynced ? 1 : 0;
     ec.isErased = ec.isErased ? 1 : 0;
     ec.id = getSql().replace("entity_changes", ec);

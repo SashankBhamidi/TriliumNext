@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import { decodeUtf8, encodeUtf8 } from "./utils/binary.js";
+import { getContext, set as ctxSet } from "./context.js";
 import protectedSession from "./protected_session.js";
 
 // The global server spec setup (apps/server/spec/setup.ts) calls initializeCore,
@@ -93,6 +94,68 @@ describe("protected_session", () => {
         it("decryptString returns the original string for a string round-trip", () => {
             const cipherText = protectedSession.encrypt("decrypt me") as string;
             expect(protectedSession.decryptString(cipherText)).toBe("decrypt me");
+        });
+    });
+
+    describe("per-user key isolation", () => {
+        const KEY_A = encodeUtf8("aaaaaaaaaaaaaaaa");
+        const KEY_B = encodeUtf8("bbbbbbbbbbbbbbbb");
+
+        afterEach(() => {
+            getContext().init(() => { ctxSet("userId", "user-a"); protectedSession.resetDataKey(); });
+            getContext().init(() => { ctxSet("userId", "user-b"); protectedSession.resetDataKey(); });
+        });
+
+        it("stores keys independently per userId", () => {
+            getContext().init(() => {
+                ctxSet("userId", "user-a");
+                protectedSession.setDataKey(KEY_A);
+            });
+            getContext().init(() => {
+                ctxSet("userId", "user-b");
+                protectedSession.setDataKey(KEY_B);
+            });
+
+            const availA = getContext().init(() => {
+                ctxSet("userId", "user-a");
+                return protectedSession.isProtectedSessionAvailable();
+            });
+            const availB = getContext().init(() => {
+                ctxSet("userId", "user-b");
+                return protectedSession.isProtectedSessionAvailable();
+            });
+            expect(availA).toBe(true);
+            expect(availB).toBe(true);
+        });
+
+        it("resetting one user's key does not affect the other", () => {
+            getContext().init(() => { ctxSet("userId", "user-a"); protectedSession.setDataKey(KEY_A); });
+            getContext().init(() => { ctxSet("userId", "user-b"); protectedSession.setDataKey(KEY_B); });
+
+            getContext().init(() => { ctxSet("userId", "user-a"); protectedSession.resetDataKey(); });
+
+            const availA = getContext().init(() => { ctxSet("userId", "user-a"); return protectedSession.isProtectedSessionAvailable(); });
+            const availB = getContext().init(() => { ctxSet("userId", "user-b"); return protectedSession.isProtectedSessionAvailable(); });
+            expect(availA).toBe(false);
+            expect(availB).toBe(true);
+        });
+
+        it("isProtectedSessionAvailable returns false for a user with no key while another user has one", () => {
+            getContext().init(() => { ctxSet("userId", "user-a"); protectedSession.setDataKey(KEY_A); });
+
+            // user-b has never had a key set — must be unavailable regardless of user-a
+            const availB = getContext().init(() => {
+                ctxSet("userId", "user-b");
+                return protectedSession.isProtectedSessionAvailable();
+            });
+            expect(availB).toBe(false);
+
+            // user-a's session must still be available
+            const availA = getContext().init(() => {
+                ctxSet("userId", "user-a");
+                return protectedSession.isProtectedSessionAvailable();
+            });
+            expect(availA).toBe(true);
         });
     });
 

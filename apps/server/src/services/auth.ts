@@ -155,7 +155,7 @@ function checkAppNotInitialized(req: Request, res: Response, next: NextFunction)
 }
 
 function checkEtapiToken(req: Request, res: Response, next: NextFunction) {
-    if (etapiTokenService.isValidAuthHeader(req.headers.authorization)) {
+    if (etapiTokenService.getTokenFromAuthHeader(req.headers.authorization)) {
         next();
     } else {
         reject(req, res, "Token not found");

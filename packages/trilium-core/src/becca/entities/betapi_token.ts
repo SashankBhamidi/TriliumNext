@@ -28,6 +28,7 @@ class BEtapiToken extends AbstractBeccaEntity<BEtapiToken> {
     etapiTokenId?: string;
     name!: string;
     tokenHash!: string;
+    userId: string | null = null;
     private _isDeleted?: boolean;
 
     constructor(row?: EtapiTokenRow) {
@@ -49,6 +50,7 @@ class BEtapiToken extends AbstractBeccaEntity<BEtapiToken> {
         this.etapiTokenId = row.etapiTokenId;
         this.name = row.name;
         this.tokenHash = row.tokenHash;
+        this.userId = row.userId ?? null;
         this.utcDateCreated = row.utcDateCreated || dateUtils.utcNowDateTime();
         this.utcDateModified = row.utcDateModified || this.utcDateCreated;
         this._isDeleted = !!row.isDeleted;
@@ -69,6 +71,7 @@ class BEtapiToken extends AbstractBeccaEntity<BEtapiToken> {
             etapiTokenId: this.etapiTokenId,
             name: this.name,
             tokenHash: this.tokenHash,
+            userId: this.userId,
             utcDateCreated: this.utcDateCreated,
             utcDateModified: this.utcDateModified,
             isDeleted: this.isDeleted

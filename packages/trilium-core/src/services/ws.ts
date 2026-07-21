@@ -130,14 +130,14 @@ const ORDERING: Record<string, number> = {
     options: 0,
 };
 
-function buildFrontendUpdateMessage(entityChangeIds: number[]): WebSocketMessage | null {
-    if (entityChangeIds.length === 0) {
-        return { type: "ping" };
-    }
+function loadEntityChanges(ids: number[]): EntityChange[] {
+    if (ids.length === 0) return [];
+    return getSql().getManyRows<EntityChange>(/*sql*/`SELECT * FROM entity_changes WHERE id IN (???)`, ids) ?? [];
+}
 
-    const entityChanges = getSql().getManyRows<EntityChange>(/*sql*/`SELECT * FROM entity_changes WHERE id IN (???)`, entityChangeIds);
-    if (!entityChanges) {
-        return null;
+function buildFrontendUpdateMessage(entityChanges: EntityChange[]): WebSocketMessage | null {
+    if (entityChanges.length === 0) {
+        return { type: "ping" };
     }
 
     // sort entity changes since froca expects "referential order", i.e. referenced entities should already exist
@@ -163,12 +163,43 @@ function buildFrontendUpdateMessage(entityChangeIds: number[]): WebSocketMessage
 }
 
 function sendTransactionEntityChangesToAllClients() {
-    if (messagingProvider) {
-        const entityChangeIds = cls.getAndClearEntityChangeIds();
-        const message = buildFrontendUpdateMessage(entityChangeIds);
+    if (!messagingProvider) return;
 
-        if (message) {
-            messagingProvider.sendMessageToAllClients(message);
+    const ids = cls.getAndClearEntityChangeIds();
+
+    if (ids.length === 0) {
+        // No pending changes; send a keepalive ping to all clients.
+        messagingProvider.sendMessageToAllClients({ type: "ping" });
+        return;
+    }
+
+    const allChanges = loadEntityChanges(ids);
+    if (allChanges.length === 0) {
+        // IDs were queued but the DB returned nothing (e.g. rows rolled back or query failed).
+        return;
+    }
+
+    // System rows (userId IS NULL) go to all connected clients.
+    const systemChanges = allChanges.filter(ec => ec.userId == null);
+    // User-attributed rows go only to that user's connected clients.
+    const byUser = new Map<string, EntityChange[]>();
+    for (const ec of allChanges) {
+        if (ec.userId != null) {
+            const arr = byUser.get(ec.userId) ?? [];
+            arr.push(ec);
+            byUser.set(ec.userId, arr);
+        }
+    }
+
+    if (systemChanges.length > 0) {
+        const systemMsg = buildFrontendUpdateMessage(systemChanges);
+        if (systemMsg) messagingProvider.sendMessageToAllClients(systemMsg);
+    }
+
+    if (messagingProvider.sendMessageToUserClients) {
+        for (const [userId, changes] of byUser) {
+            const msg = buildFrontendUpdateMessage(changes);
+            if (msg) messagingProvider.sendMessageToUserClients(userId, msg);
         }
     }
 }
